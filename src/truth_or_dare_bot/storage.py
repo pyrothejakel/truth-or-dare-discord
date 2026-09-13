@@ -4,6 +4,9 @@ import random
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
+from .migrations import allow_nhie
+
+PROMPT_KINDS = {"truth": "Truth", "dare": "Dare", "nhie": "Never Have I Ever"}
 
 DEFAULT_PROMPTS = [
     ("truth", 1, "icebreaker", "What is a small thing that made you smile today?"),
@@ -36,7 +39,11 @@ class Store:
             self.conn = sqlite3.connect(self.path, timeout=10)
             self.conn.row_factory = sqlite3.Row
             self.conn.execute("PRAGMA foreign_keys=ON")
-        self._initialize()
+        try:
+            self._initialize()
+        except BaseException:
+            self.conn.close()
+            raise
 
     def execute(self, sql, values=()):
         return self.conn.execute(sql.replace("?", "%s") if self.postgres else sql, values)
@@ -52,7 +59,7 @@ class Store:
         timestamp = "(CURRENT_TIMESTAMP::text)" if self.postgres else "CURRENT_TIMESTAMP"
         with self.transaction():
             self.execute(f"""CREATE TABLE IF NOT EXISTS prompts (
-                id {identity}, kind TEXT NOT NULL CHECK(kind IN ('truth','dare')),
+                id {identity}, kind TEXT NOT NULL CHECK(kind IN ('truth','dare','nhie')),
                 intensity INTEGER NOT NULL CHECK(intensity BETWEEN 1 AND 5),
                 theme TEXT, text TEXT NOT NULL UNIQUE)""")
             self.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
@@ -60,6 +67,8 @@ class Store:
                 prompt_id INTEGER NOT NULL REFERENCES prompts(id),
                 posted_at TEXT NOT NULL DEFAULT {timestamp})""")
             self.execute("CREATE TABLE IF NOT EXISTS scheduled_days (day TEXT PRIMARY KEY, status TEXT NOT NULL)")
+            self.execute("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)")
+        allow_nhie(self)
         if not self.execute("SELECT 1 FROM prompts LIMIT 1").fetchone():
             self.add_prompts(DEFAULT_PROMPTS)
 
@@ -81,8 +90,8 @@ class Store:
         for kind, intensity, theme, text in prompts:
             kind, text = kind.strip().lower(), text.strip()
             theme = theme.strip() if theme else None
-            if kind not in {"truth", "dare"} or isinstance(intensity, bool) or str(intensity) not in {"1", "2", "3", "4", "5"}:
-                raise ValueError("Prompt needs truth/dare and intensity 1-5.")
+            if kind not in PROMPT_KINDS or isinstance(intensity, bool) or str(intensity) not in {"1", "2", "3", "4", "5"}:
+                raise ValueError("Prompt needs truth/dare/nhie and intensity 1-5.")
             if not 1 <= len(text) <= 3500 or (theme and len(theme) > 80):
                 raise ValueError("Prompt text must be 1-3500 characters; theme at most 80.")
             normalized.append((kind, int(intensity), theme, text))
@@ -104,8 +113,8 @@ class Store:
         return [row["theme"] for row in rows]
 
     def choose_prompt(self, mode="mixed", theme=None, intensity=None):
-        if mode not in {"truth", "dare", "mixed"}:
-            raise ValueError("Mode must be truth, dare, or mixed.")
+        if mode not in {*PROMPT_KINDS, "mixed"}:
+            raise ValueError("Mode must be truth, dare, nhie, or mixed.")
         if intensity is not None and (isinstance(intensity, bool) or intensity not in range(1, 6)):
             raise ValueError("Intensity must be 1-5.")
         clauses, values = [], []

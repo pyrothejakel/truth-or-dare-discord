@@ -179,7 +179,7 @@ class RuntimeBehavior(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(field['required'])
             self.assertTrue(1 <= len(field['description']) <= 100)
             self.assertIn('Leave blank', field['description'])
-        self.assertEqual([c['value'] for c in fields['mode']['choices']], ['mixed', 'truth', 'dare'])
+        self.assertEqual([c['value'] for c in fields['mode']['choices']], ['mixed', 'truth', 'dare', 'nhie'])
         self.assertEqual([c['value'] for c in fields['intensity']['choices']], [1, 2, 3, 4, 5])
         self.assertTrue(fields['theme']['autocomplete'])
 

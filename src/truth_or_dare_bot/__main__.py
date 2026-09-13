@@ -9,7 +9,7 @@ from discord import app_commands
 from discord.ext import tasks
 from dotenv import load_dotenv
 from .config import Config, clock_time, timezone_name, in_quiet_hours
-from .storage import Store
+from .storage import Store, PROMPT_KINDS
 
 log = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ class TruthDareBot(discord.Client):
             prompt = self.store.choose_prompt(mode, theme, intensity)
             if prompt is None: return "No prompt matches those filters."
             if day and not self.store.claim_day(day): return "Today's scheduled post was already attempted."
-            embed = discord.Embed(title=f"{prompt.kind.title()} • Level {prompt.intensity}", description=prompt.text, color=discord.Color.blurple())
+            embed = discord.Embed(title=f"{PROMPT_KINDS[prompt.kind]} • Level {prompt.intensity}", description=prompt.text, color=discord.Color.blurple())
             embed.set_footer(text=f"Theme: {prompt.theme or 'any'} • Participation is optional; you can pass.")
             # Record only after Discord confirms delivery. Never retry an ambiguous send.
             await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
@@ -130,22 +130,23 @@ class TruthDareBot(discord.Client):
             return []
 
     def register_commands(self):
-        @self.tree.command(name="ask-now", description="Post now. Choose optional filters, or leave all blank for any truth or dare.")
+        @self.tree.command(name="ask-now", description="Post a Truth, Dare or Never Have I Ever prompt. Leave filters blank for Mixed.")
         @app_commands.describe(
-            mode="Choose Truth (questions), Dare (challenges), or Mixed (either). Leave blank for Mixed.",
+            mode="Choose Truth, Dare, NHIE (Never Have I Ever), or Mixed (all three). Leave blank for Mixed.",
             theme="Pick a saved theme, or type to search (e.g. fun). Leave blank to include all themes.",
             intensity="Pick an exact level from 1 to 5, as assigned to each prompt. Leave blank to include all levels.",
         )
         @app_commands.choices(
-            mode=[app_commands.Choice(name="Mixed - truth or dare (default)", value="mixed"),
+            mode=[app_commands.Choice(name="Mixed - Truth, Dare or NHIE (default)", value="mixed"),
                   app_commands.Choice(name="Truth - questions", value="truth"),
-                  app_commands.Choice(name="Dare - challenges", value="dare")],
+                  app_commands.Choice(name="Dare - challenges", value="dare"),
+                  app_commands.Choice(name="NHIE - Never Have I Ever", value="nhie")],
             intensity=[app_commands.Choice(name=f"Level {level}", value=level) for level in range(1, 6)],
         )
         async def ask_now(i: discord.Interaction, mode: str = "mixed", theme: str | None = None,
                           intensity: app_commands.Range[int, 1, 5] | None = None):
-            if mode not in {"truth", "dare", "mixed"}:
-                await i.response.send_message("Mode must be truth, dare, or mixed.", ephemeral=True)
+            if mode not in {*PROMPT_KINDS, "mixed"}:
+                await i.response.send_message("Mode must be truth, dare, nhie, or mixed.", ephemeral=True)
                 return
             await i.response.defer(ephemeral=True)
             try:
@@ -196,6 +197,13 @@ class TruthDareBot(discord.Client):
 
         @self.tree.command(name="configure", description="Set daily mode, theme and intensity (Manage Server required).")
         @app_commands.default_permissions(manage_guild=True)
+        @app_commands.describe(mode="Choose Truth, Dare, NHIE (Never Have I Ever), or Mixed (all three). Leave blank for Mixed.")
+        @app_commands.choices(mode=[
+            app_commands.Choice(name="Mixed - Truth, Dare or NHIE (default)", value="mixed"),
+            app_commands.Choice(name="Truth - questions", value="truth"),
+            app_commands.Choice(name="Dare - challenges", value="dare"),
+            app_commands.Choice(name="NHIE - Never Have I Ever", value="nhie"),
+        ])
         async def configure(i: discord.Interaction, mode: str = "mixed", theme: str = "",
                             intensity: app_commands.Range[int, 1, 5] | None = None):
             if not await self.require_admin(i): return
@@ -212,7 +220,7 @@ class TruthDareBot(discord.Client):
         async def settings(i: discord.Interaction):
             s = self.store
             lines = [f"Paused: {s.paused()}", f"Daily: {s.get_setting('post_time', self.config.post_time)} ({s.get_setting('timezone', self.config.timezone)})",
-                     f"Mode: {s.get_setting('mode', 'mixed')}", f"Theme: {s.get_setting('theme', '') or 'any'}",
+                     f"Mode: {PROMPT_KINDS.get(s.get_setting('mode', 'mixed'), s.get_setting('mode', 'mixed'))}", f"Theme: {s.get_setting('theme', '') or 'any'}",
                      f"Intensity: {s.get_setting('intensity', '') or 'any'}",
                      f"Quiet hours: {s.get_setting('quiet_start', '') or 'disabled'} – {s.get_setting('quiet_end', '')}",
                      f"Prompts: {s.count_prompts()}", f"Last confirmed scheduled date: {s.get_setting('last_post_date', 'none')}"]
@@ -220,6 +228,15 @@ class TruthDareBot(discord.Client):
 
         @self.tree.command(name="add-prompt", description="Add one prompt (Manage Server required).")
         @app_commands.default_permissions(manage_guild=True)
+        @app_commands.describe(
+            kind="Choose Truth, Dare or NHIE (Never Have I Ever).",
+            text='Enter the whole prompt. For NHIE, start with "Never have I ever...".',
+        )
+        @app_commands.choices(kind=[
+            app_commands.Choice(name="Truth - questions", value="truth"),
+            app_commands.Choice(name="Dare - challenges", value="dare"),
+            app_commands.Choice(name="NHIE - Never Have I Ever", value="nhie"),
+        ])
         async def add_prompt(i: discord.Interaction, kind: str, intensity: app_commands.Range[int, 1, 5], text: str, theme: str = ""):
             if not await self.require_admin(i): return
             try: added = self.store.add_prompts([(kind, intensity, theme or None, text)])
@@ -229,6 +246,7 @@ class TruthDareBot(discord.Client):
 
         @self.tree.command(name="import-prompts", description="Import type|intensity|theme|text lines (Manage Server required).")
         @app_commands.default_permissions(manage_guild=True)
+        @app_commands.describe(prompts="One line per prompt: truth/dare/nhie|1-5|theme|full prompt text. Theme may be blank.")
         async def import_prompts(i: discord.Interaction, prompts: str):
             if not await self.require_admin(i): return
             try:
@@ -236,7 +254,7 @@ class TruthDareBot(discord.Client):
                 if not rows: raise ValueError("No prompts supplied.")
                 added = self.store.add_prompts(rows)
             except (ValueError, TypeError):
-                await i.response.send_message("Nothing imported. Each line needs truth/dare|1-5|theme|prompt text. Theme max 80; text max 3500 characters.", ephemeral=True); return
+                await i.response.send_message("Nothing imported. Each line needs truth/dare/nhie|1-5|theme|prompt text. Theme max 80; text max 3500 characters.", ephemeral=True); return
             await i.response.send_message(f"Imported {added} prompt(s).", ephemeral=True)
 
 def main():

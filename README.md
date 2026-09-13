@@ -1,6 +1,7 @@
 # Truth or Dare Discord Bot
 
-A single-server bot with daily prompts, slash commands, themes, intensity levels,
+A single-server bot for Truth, Dare and Never Have I Ever (NHIE), with daily
+prompts, slash commands, themes, intensity levels,
 quiet hours, admin prompt management and durable history. It never tags members.
 Participation is optional. Six general-audience starter prompts are included;
 server administrators supply any additional prompt collection.
@@ -12,22 +13,23 @@ Discord's **Manage Server** permission and are checked again by the bot.
 
 | Command | Purpose |
 | --- | --- |
-| `/ask-now [mode] [theme] [intensity]` | Post now; mode is truth, dare or mixed; intensity is 1-5. |
+| `/ask-now [mode] [theme] [intensity]` | Post now; mode is truth, dare, nhie or mixed; intensity is 1-5. |
 | `/settings` | Show schedule, quiet hours, filters, pause state and prompt count. |
 | `/pause`, `/resume` | Pause/resume automatic posts. Manual posts remain available outside quiet hours. |
 | `/schedule time timezone` | Set HH:MM local time and an IANA timezone. Default: 19:00 America/Chicago. |
 | `/quiet-hours [start] [end]` | Suppress all prompts during this interval, including overnight. Omit both to disable. |
 | `/configure [mode] [theme] [intensity]` | Set filters for scheduled posts. Omitted theme/intensity means any. |
-| `/add-prompt kind intensity text [theme]` | Add a prompt; kind is truth or dare. |
-| `/import-prompts prompts` | Import one `truth/dare|1-5|theme|text` entry per line. Invalid batches make no changes. |
+| `/add-prompt kind intensity text [theme]` | Add a prompt; kind is truth, dare or nhie. |
+| `/import-prompts prompts` | Import one `truth/dare/nhie|1-5|theme|text` entry per line. Invalid batches make no changes. |
 
 ### Choosing `/ask-now` options
 
 All three options are optional. Select `/ask-now` in the configured Discord
 channel, then select an option to see its description and available choices:
 
-- **mode:** choose **Mixed - truth or dare (default)**, **Truth - questions**,
-  or **Dare - challenges**. Leaving it blank uses Mixed.
+- **mode:** choose **Mixed - Truth, Dare or NHIE (default)**, **Truth - questions**,
+  **Dare - challenges**, or **NHIE - Never Have I Ever**. Leaving it blank uses
+  Mixed, which draws from all three types that have saved prompts.
 - **theme:** choose a category already attached to your saved prompts, or type
   part of its name to search. For example, type `fu` to find `fun`. Leaving it
   blank includes all themes. Selecting a theme filters prompts; it does not add
@@ -40,6 +42,33 @@ For example, select **Truth - questions**, theme **fun**, and **Level 2** to
 request a truth question tagged `fun` at level 2. If no saved prompt matches all
 selected filters, the bot explains that no prompt matches. Submit `/ask-now`
 with no options to choose from the whole prompt collection.
+
+### Adding Never Have I Ever prompts
+
+NHIE is a separate game type; themes and levels work the same way for all types.
+In `/add-prompt`, choose **NHIE - Never Have I Ever** for **kind**, choose a level
+from 1 to 5, enter the full statement in **text**, and optionally add a **theme**.
+For example: `Never have I ever forgotten someone's name right after meeting them.`
+The text is posted as written; the bot does not prepend the phrase.
+
+For `/import-prompts`, use `nhie` in the first column, for example:
+
+```text
+nhie|1|icebreaker|Never have I ever waved back at someone who was waving at somebody else.
+```
+
+These examples are not added automatically. Add your collection through the
+admin commands; then choose **NHIE - Never Have I Ever** in `/ask-now` to use it,
+or in `/configure` to use it for daily posts. New prompts are available immediately.
+Until you add NHIE prompts, selecting NHIE reports that no prompts match.
+
+On the first startup of this version, the bot upgrades the SQLite/PostgreSQL
+prompt-type constraint transactionally. Existing prompt IDs, history, settings
+and daily claims are preserved. A failed migration stops startup and rolls back
+its schema/data changes. The successful migration is recorded and skipped on
+later startups. Keep normal database backups before deployment. Older versions
+do not support NHIE: use an NHIE-capable build after adding NHIE data or selecting
+it for the daily mode.
 
 Prompts avoid the most recent 20 selections where the pool permits; otherwise
 the least recently used matching prompt is chosen. Matching only one prompt
