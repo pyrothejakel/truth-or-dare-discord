@@ -41,6 +41,22 @@ class StorageBoundaries(unittest.TestCase):
         self.assertEqual(self.store.add_prompts([('truth', 1, 'fun', 'test')]), 0)
         self.assertEqual(self.store.choose_prompt('truth', 'FUN', 1).text, 'test')
 
+    def test_theme_search_is_literal_case_insensitive_distinct_and_bounded(self):
+        self.store.add_prompts([
+            ('truth', 1, 'FUN', 'same category, different case'),
+            ('truth', 1, '100% real', 'percent theme'),
+            ('truth', 1, 'a_b', 'underscore theme'),
+            ('truth', 1, 'a!b', 'escape theme'),
+            ('truth', 1, None, 'no category'),
+        ] + [('truth', 1, f'category-{n:02}', f'question {n}') for n in range(30)])
+        self.assertEqual([t.lower() for t in self.store.list_themes(' FUn ')], ['fun'])
+        self.assertEqual(self.store.list_themes('%'), ['100% real'])
+        self.assertEqual(self.store.list_themes('_'), ['a_b'])
+        self.assertEqual(self.store.list_themes('!'), ['a!b'])
+        self.assertEqual(self.store.list_themes("' OR 1=1 --"), [])
+        self.assertEqual(len(self.store.list_themes()), 25)
+        self.assertEqual(self.store.list_themes('category-'), [f'category-{n:02}' for n in range(25)])
+
     def test_cycle_has_no_repeat_until_exhausted_and_reuses_oldest(self):
         sequence = []
         for _ in range(6):
@@ -154,6 +170,37 @@ class RuntimeBehavior(unittest.IsolatedAsyncioTestCase):
         await self.bot.tree.get_command('schedule').callback(i,'20:00','Not/AZone')
         self.assertIsNone(self.store.get_setting('post_time'))
         self.assertIn('timezone', i.response.send_message.call_args.args[0])
+
+    async def test_ask_now_discord_payload_has_optional_guided_inputs(self):
+        payload = self.bot.tree.get_command('ask-now').to_dict(self.bot.tree)
+        fields = {field['name']: field for field in payload['options']}
+        self.assertEqual(set(fields), {'mode', 'theme', 'intensity'})
+        for field in fields.values():
+            self.assertFalse(field['required'])
+            self.assertTrue(1 <= len(field['description']) <= 100)
+            self.assertIn('Leave blank', field['description'])
+        self.assertEqual([c['value'] for c in fields['mode']['choices']], ['mixed', 'truth', 'dare'])
+        self.assertEqual([c['value'] for c in fields['intensity']['choices']], [1, 2, 3, 4, 5])
+        self.assertTrue(fields['theme']['autocomplete'])
+
+    async def test_theme_autocomplete_cannot_read_other_channel_data(self):
+        with patch.object(self.store, 'list_themes') as lookup:
+            for guild, channel in [(3, 2), (1, 3), (None, None)]:
+                i = MagicMock(guild_id=guild, channel_id=channel)
+                self.assertEqual(await self.bot.theme_suggestions(i, 'fun'), [])
+            lookup.assert_not_called()
+        i = MagicMock(guild_id=1, channel_id=2)
+        choices = await self.bot.theme_suggestions(i, 'fU')
+        self.assertEqual([(c.name, c.value) for c in choices], [('fun', 'fun')])
+        self.channel.send.assert_not_called()
+
+    async def test_theme_autocomplete_storage_failure_returns_no_private_error(self):
+        i = MagicMock(guild_id=1, channel_id=2)
+        with patch.object(self.store, 'list_themes', side_effect=RuntimeError('private details')):
+            with self.assertLogs('truth_or_dare_bot.__main__', level='WARNING') as logs:
+                self.assertEqual(await self.bot.theme_suggestions(i, 'fun'), [])
+        self.assertNotIn('private details', ''.join(logs.output))
+        self.channel.send.assert_not_called()
 
     async def test_settings_newlines_and_command_registration(self):
         i=MagicMock(); i.response.send_message=AsyncMock()

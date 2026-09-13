@@ -21,6 +21,26 @@ Discord's **Manage Server** permission and are checked again by the bot.
 | `/add-prompt kind intensity text [theme]` | Add a prompt; kind is truth or dare. |
 | `/import-prompts prompts` | Import one `truth/dare|1-5|theme|text` entry per line. Invalid batches make no changes. |
 
+### Choosing `/ask-now` options
+
+All three options are optional. Select `/ask-now` in the configured Discord
+channel, then select an option to see its description and available choices:
+
+- **mode:** choose **Mixed - truth or dare (default)**, **Truth - questions**,
+  or **Dare - challenges**. Leaving it blank uses Mixed.
+- **theme:** choose a category already attached to your saved prompts, or type
+  part of its name to search. For example, type `fu` to find `fun`. Leaving it
+  blank includes all themes. Selecting a theme filters prompts; it does not add
+  a new category or question. Suggestions update as administrators add prompts.
+- **intensity:** choose **Level 1** through **Level 5**. This matches the exact
+  level assigned when a prompt was added, not a maximum level. Leaving it blank
+  includes every level. Authors decide which level to assign to each prompt.
+
+For example, select **Truth - questions**, theme **fun**, and **Level 2** to
+request a truth question tagged `fun` at level 2. If no saved prompt matches all
+selected filters, the bot explains that no prompt matches. Submit `/ask-now`
+with no options to choose from the whole prompt collection.
+
 Prompts avoid the most recent 20 selections where the pool permits; otherwise
 the least recently used matching prompt is chosen. Matching only one prompt
 necessarily allows repeats. Quiet hours use the configured timezone, include the

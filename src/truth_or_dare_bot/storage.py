@@ -94,6 +94,15 @@ class Store:
                 added += self.execute("INSERT INTO prompts(kind,intensity,theme,text) VALUES(?,?,?,?) ON CONFLICT(text) DO NOTHING", row).rowcount
         return added
 
+    def list_themes(self, search=""):
+        # Treat autocomplete text literally; bound results before sending to Discord.
+        search = search.strip().lower().replace("!", "!!").replace("%", "!%").replace("_", "!_")
+        rows = self.execute("""SELECT MIN(theme) AS theme FROM prompts
+            WHERE theme IS NOT NULL AND trim(theme) <> ''
+              AND lower(theme) LIKE ? ESCAPE '!'
+            GROUP BY lower(theme) ORDER BY lower(theme) LIMIT 25""", (f"%{search}%",)).fetchall()
+        return [row["theme"] for row in rows]
+
     def choose_prompt(self, mode="mixed", theme=None, intensity=None):
         if mode not in {"truth", "dare", "mixed"}:
             raise ValueError("Mode must be truth, dare, or mixed.")

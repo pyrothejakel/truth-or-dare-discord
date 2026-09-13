@@ -118,8 +118,30 @@ class TruthDareBot(discord.Client):
             return False
         return True
 
+    async def theme_suggestions(self, i, current):
+        # Autocomplete callbacks need their own boundary check before reading data.
+        if i.guild_id != self.config.guild_id or i.channel_id != self.config.channel_id:
+            return []
+        try:
+            return [app_commands.Choice(name=theme, value=theme)
+                    for theme in self.store.list_themes(current)]
+        except Exception as error:
+            log.warning("Theme suggestions unavailable: %s", type(error).__name__)
+            return []
+
     def register_commands(self):
-        @self.tree.command(name="ask-now", description="Post a Truth or Dare prompt in this channel.")
+        @self.tree.command(name="ask-now", description="Post now. Choose optional filters, or leave all blank for any truth or dare.")
+        @app_commands.describe(
+            mode="Choose Truth (questions), Dare (challenges), or Mixed (either). Leave blank for Mixed.",
+            theme="Pick a saved theme, or type to search (e.g. fun). Leave blank to include all themes.",
+            intensity="Pick an exact level from 1 to 5, as assigned to each prompt. Leave blank to include all levels.",
+        )
+        @app_commands.choices(
+            mode=[app_commands.Choice(name="Mixed - truth or dare (default)", value="mixed"),
+                  app_commands.Choice(name="Truth - questions", value="truth"),
+                  app_commands.Choice(name="Dare - challenges", value="dare")],
+            intensity=[app_commands.Choice(name=f"Level {level}", value=level) for level in range(1, 6)],
+        )
         async def ask_now(i: discord.Interaction, mode: str = "mixed", theme: str | None = None,
                           intensity: app_commands.Range[int, 1, 5] | None = None):
             if mode not in {"truth", "dare", "mixed"}:
@@ -131,6 +153,10 @@ class TruthDareBot(discord.Client):
             except discord.HTTPException:
                 result = "Posting could not be confirmed. Check the channel and my posting permissions before retrying."
             await i.followup.send(result, ephemeral=True)
+
+        @ask_now.autocomplete("theme")
+        async def ask_now_theme(i: discord.Interaction, current: str):
+            return await self.theme_suggestions(i, current)
 
         @self.tree.command(name="pause", description="Pause scheduled posts (Manage Server required).")
         @app_commands.default_permissions(manage_guild=True)
