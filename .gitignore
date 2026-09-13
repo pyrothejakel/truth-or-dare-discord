@@ -4,4 +4,11 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 *.log
-data/*.sqlite3
+data/
+*.sqlite*
+*.db*
+.env.*
+!.env.example
+build/
+dist/
+.pytest_cache/

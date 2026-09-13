@@ -1,9 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "truth-or-dare-discord"
-version = "0.1.0"
+version = "0.2.0"
 description = "A scheduled Truth or Dare Discord bot"
 requires-python = ">=3.11"
-dependencies = ["discord.py>=2.4,<3", "python-dotenv>=1.0,<2", "tzdata>=2026.4"]
+dependencies = ["discord.py>=2.4,<3", "python-dotenv>=1.0,<2", "tzdata>=2026.4", "psycopg[binary]>=3.2,<4"]
 
 [project.scripts]
 truth-or-dare-bot = "truth_or_dare_bot.__main__:main"
