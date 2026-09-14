@@ -72,7 +72,7 @@ class TruthDareBot(discord.Client):
             if prompt is None: return "No prompt matches those filters."
             if day and not self.store.claim_day(day): return "Today's scheduled post was already attempted."
             embed = discord.Embed(title=f"{PROMPT_KINDS[prompt.kind]} • Level {prompt.intensity}", description=prompt.text, color=discord.Color.blurple())
-            embed.set_footer(text=f"Theme: {prompt.theme or 'any'} • Participation is optional; you can pass.")
+            embed.set_footer(text=f"Theme: {prompt.theme or 'any'}")
             # Record only after Discord confirms delivery. Never retry an ambiguous send.
             await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
             self.store.record_post(prompt.id)
